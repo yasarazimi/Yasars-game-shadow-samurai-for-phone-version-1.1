@@ -49,6 +49,7 @@ class GameEngine {
     // Physics & ticks
     var tick by mutableStateOf(0L)
     var screenShakeIntensity by mutableStateOf(0f)
+    var hitstopFrames = 0
     
     // Virtual Keys State - Player 1
     var p1LeftPressed = false
@@ -92,6 +93,7 @@ class GameEngine {
         aiAttackCooldown = 0
         aiJumpCooldown = 0
         screenShakeIntensity = 0f
+        hitstopFrames = 0
     }
 
     fun triggerScreenShake(intensity: Float) {
@@ -172,6 +174,19 @@ class GameEngine {
             return
         }
 
+        // Apply hitstop frames to freeze animations/physics on hit connections for extreme crunch!
+        if (hitstopFrames > 0) {
+            hitstopFrames--
+            // Maintain screen shake and particles decay during hitstop for visual splendor
+            if (screenShakeIntensity > 0f) {
+                screenShakeIntensity *= 0.85f
+                if (screenShakeIntensity < 0.1f) screenShakeIntensity = 0f
+            }
+            updateParticles()
+            tick++
+            return
+        }
+
         // Apply background shop sprite frames (6 frames scaled at 60fps)
         shopFrameElapsed++
         if (shopFrameElapsed % 8 == 0) {
@@ -201,7 +216,7 @@ class GameEngine {
                 player1.velocityX = 0f
                 player1.switchState(FighterState.IDLE)
             }
-        } else if (player1.dead || player1.state == FighterState.ATTACK || player1.state == FighterState.TAKE_HIT) {
+        } else if (player1.dead || player1.state == FighterState.ATTACK) {
             player1.velocityX = 0f
         }
 
@@ -220,7 +235,7 @@ class GameEngine {
                     player2.velocityX = 0f
                     player2.switchState(FighterState.IDLE)
                 }
-            } else if (player2.dead || player2.state == FighterState.ATTACK || player2.state == FighterState.TAKE_HIT) {
+            } else if (player2.dead || player2.state == FighterState.ATTACK) {
                 player2.velocityX = 0f
             }
         }
@@ -238,8 +253,9 @@ class GameEngine {
                 // Register hit on Player 2!
                 spawnBloodSplatter(player2.x + player2.width / 2f, player2.y + player2.height / 3f)
                 spawnSlashParticles(player2.x + player2.width / 2f, player2.y + player2.height / 2f, isLeft = false)
-                player2.takeHit()
-                triggerScreenShake(12f)
+                player2.takeHit(player1.facingDirection)
+                triggerScreenShake(22f) // Extra violent screenshake
+                hitstopFrames = 8 // Freeze frame for 8 frames
             }
             player1.isAttacking = false // Avoid double registering
         }
@@ -252,8 +268,9 @@ class GameEngine {
                 // Register hit on Player 1!
                 spawnBloodSplatter(player1.x + player1.width / 2f, player1.y + player1.height / 3f)
                 spawnSlashParticles(player1.x + player1.width / 2f, player1.y + player1.height / 2f, isLeft = true)
-                player1.takeHit()
-                triggerScreenShake(12f)
+                player1.takeHit(player2.facingDirection)
+                triggerScreenShake(22f) // Extra violent screenshake
+                hitstopFrames = 8 // Freeze frame for 8 frames
             }
             player2.isAttacking = false // Avoid double registering
         }
@@ -351,6 +368,7 @@ class GameEngine {
             if (Random.nextInt(100) < dodgeChance && actor.velocityY == 0f && aiJumpCooldown == 0) {
                 actor.velocityY = -18f
                 aiJumpCooldown = 40
+                SoundManager.playJump()
             }
         }
 
@@ -358,6 +376,7 @@ class GameEngine {
         if (Random.nextDouble() * 100 < jumpRatePercent && actor.velocityY == 0f && aiJumpCooldown == 0) {
             actor.velocityY = -19f
             aiJumpCooldown = 50
+            SoundManager.playJump()
         }
     }
 

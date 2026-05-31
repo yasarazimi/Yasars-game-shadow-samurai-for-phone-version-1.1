@@ -52,8 +52,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -94,6 +99,18 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        // Resume koto ambient music throughout brawler menus and combat
+        com.example.game.SoundManager.startAmbientMusic()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Free and stop static synthetic sound loops
+        com.example.game.SoundManager.stopAmbientMusic()
+    }
 }
 
 @Composable
@@ -117,7 +134,10 @@ fun GameScreen(engine: GameEngine, renderer: GameRenderer) {
     }
 
     if (showIntroVideo) {
-        IntroVideoScreen(onFinished = { showIntroVideo = false })
+        IntroVideoScreen(onFinished = { 
+            showIntroVideo = false 
+            com.example.game.SoundManager.startAmbientMusic()
+        })
     } else if (showMenu) {
         MainMenu(
             runningMode = runningMode,
@@ -629,6 +649,7 @@ fun ArenaLayout(
                                         onDown = {
                                             if (engine.player1.velocityY == 0f) {
                                                 engine.player1.velocityY = -20f
+                                                com.example.game.SoundManager.playJump()
                                             }
                                         },
                                         onUp = {}
@@ -675,6 +696,7 @@ fun ArenaLayout(
                                         onDown = {
                                             if (engine.player1.velocityY == 0f) {
                                                 engine.player1.velocityY = -20f
+                                                com.example.game.SoundManager.playJump()
                                             }
                                         },
                                         onUp = {}
@@ -736,6 +758,7 @@ fun ArenaLayout(
                                         onDown = {
                                             if (engine.player2.velocityY == 0f) {
                                                 engine.player2.velocityY = -20f
+                                                com.example.game.SoundManager.playJump()
                                             }
                                         },
                                         onUp = {}
@@ -882,59 +905,285 @@ fun MatchCompletionOverlay(
 
 @Composable
 fun IntroVideoScreen(onFinished: () -> Unit) {
-    val context = LocalContext.current
     var textOverlay by remember { mutableStateOf("THE BLADES AWAKEN...") }
-    
-    // Animate subtitles based on exact cinematic timing matching the requested frames
-    LaunchedEffect(Unit) {
-        delay(1200)
-        textOverlay = "BEGIN"
-        delay(1500)
-        textOverlay = "ONLY ONE WILL WIN."
-        delay(2500)
-        onFinished() // transition to selection menu
+    var elapsedMs by remember { mutableStateOf(0) }
+    var playedClashSound by remember { mutableStateOf(false) }
+
+    // Particle state for intro
+    val sakuraPetals = remember {
+        List(25) {
+            SakuraPetal(
+                x = (0..1024).random().toFloat(),
+                y = (0..576).random().toFloat(),
+                speedX = -1f - (0..3).random().toFloat(),
+                speedY = 1f + (0..2).random().toFloat(),
+                size = 6f + (0..8).random().toFloat(),
+                rotation = (0..360).random().toFloat(),
+                rotSpeed = 0.5f + (0..2).random().toFloat()
+            )
+        }
     }
     
+    val sparkParticles = remember { androidx.compose.runtime.mutableStateListOf<IntroSpark>() }
+    var screenShakeOffset by remember { mutableStateOf(Offset.Zero) }
+
+    LaunchedEffect(Unit) {
+        while (elapsedMs < 5200) {
+            delay(16)
+            elapsedMs += 16
+
+            // Update subtitles based on exact timing from requested frames
+            if (elapsedMs in 1200..2699) {
+                textOverlay = "BEGIN"
+            } else if (elapsedMs >= 2700) {
+                textOverlay = "ONLY ONE WILL WIN."
+            }
+
+            // Update Sakura petals
+            sakuraPetals.forEach { p ->
+                p.x += p.speedX
+                p.y += p.speedY
+                p.rotation += p.rotSpeed
+                if (p.x < -20f) p.x = 1044f
+                if (p.y > 596f) p.y = -20f
+            }
+
+            // At 3000ms, the epic clash occurs!
+            if (elapsedMs >= 3000) {
+                if (!playedClashSound) {
+                    playedClashSound = true
+                    com.example.game.SoundManager.playIntroClash()
+                    // Spawn 60 massive beautiful sparks in center
+                    for (i in 0 until 60) {
+                        val angle = (0..360).random() * Math.PI / 180.0
+                        val speed = 2f + (0..12).random().toFloat()
+                        sparkParticles.add(
+                            IntroSpark(
+                                x = 512f,
+                                y = 250f,
+                                vx = (Math.cos(angle) * speed).toFloat(),
+                                vy = (Math.sin(angle) * speed - 1.5f).toFloat(),
+                                size = 4f + (0..6).random().toFloat(),
+                                maxLife = 20 + (0..30).random()
+                            )
+                        )
+                    }
+                }
+
+                // Update Sparks
+                val it = sparkParticles.iterator()
+                while (it.hasNext()) {
+                    val sp = it.next()
+                    sp.currentLife++
+                    if (sp.currentLife >= sp.maxLife) {
+                        it.remove()
+                    } else {
+                        sp.x += sp.vx
+                        sp.y += sp.vy
+                        sp.vy += 0.2f // gravity pull
+                    }
+                }
+
+                // Screenshake decay after clash
+                val shakeIntensity = maxOf(0f, 25f - (elapsedMs - 3000) / 15f)
+                if (shakeIntensity > 0f) {
+                    screenShakeOffset = Offset(
+                        (Math.random().toFloat() * 2f - 1f) * shakeIntensity,
+                        (Math.random().toFloat() * 2f - 1f) * shakeIntensity
+                    )
+                } else {
+                    screenShakeOffset = Offset.Zero
+                }
+            }
+        }
+        onFinished()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0C0E1E)),
         contentAlignment = Alignment.Center
     ) {
-        // High quality cinematic background video with graceful errors fallback
-        androidx.compose.ui.viewinterop.AndroidView(
-            factory = { ctx ->
-                android.widget.VideoView(ctx).apply {
-                    val videoUri = android.net.Uri.parse("https://assets.mixkit.co/videos/preview/mixkit-curved-roof-of-a-japanese-temple-42171-large.mp4")
-                    setVideoURI(videoUri)
-                    setOnPreparedListener { mp ->
-                        mp.isLooping = true
-                        start()
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .aspectRatio(1024f / 576f)
+        ) {
+            val canvasScale = minOf(size.width / 1024f, size.height / 576f)
+            val dx = (size.width - 1024f * canvasScale) / 2f
+            val dy = (size.height - 576f * canvasScale) / 2f
+
+            withTransform({
+                translate(left = dx + screenShakeOffset.x, top = dy + screenShakeOffset.y)
+                scale(scaleX = canvasScale, scaleY = canvasScale, pivot = Offset.Zero)
+                clipRect(left = 0f, top = 0f, right = 1024f, bottom = 576f)
+            }) {
+                // Background Sunrise/sunset Gradient
+                val skyBrush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF0F172A), // Deep indigo
+                        Color(0xFF311042), // Cosmic purple
+                        Color(0xFF991B1B)  // Crimson sky bottom
+                    ),
+                    startY = 0f,
+                    endY = 576f
+                )
+                drawRect(brush = skyBrush, topLeft = Offset.Zero, size = Size(1024f, 576f))
+
+                // Giant Samurai Red Sun
+                drawCircle(
+                    color = Color(0xFFEF4444).copy(alpha = 0.95f),
+                    radius = 110f,
+                    center = Offset(250f, 220f)
+                )
+
+                // Draw mountains peaks in silhouette
+                val mountains = Path().apply {
+                    moveTo(0f, 576f)
+                    lineTo(0f, 430f)
+                    lineTo(180f, 320f)
+                    lineTo(350f, 460f)
+                    lineTo(500f, 290f)
+                    lineTo(680f, 440f)
+                    lineTo(850f, 310f)
+                    lineTo(1024f, 480f)
+                    lineTo(1024f, 576f)
+                    close()
+                }
+                drawPath(path = mountains, color = Color(0xFF070B19))
+
+                // Draw Japanese Pagoda Temple outline (detailed oriental silhouette)
+                drawRect(Color(0xFF02040A), Offset(790f, 350f), Size(100f, 130f)) // main tower body
+                // Roof 1
+                val roof1 = Path().apply {
+                    moveTo(760f, 360f)
+                    quadraticTo(780f, 350f, 840f, 350f)
+                    quadraticTo(900f, 350f, 920f, 360f)
+                    lineTo(900f, 335f)
+                    lineTo(780f, 335f)
+                    close()
+                }
+                drawPath(roof1, Color(0xFF02040A))
+                // Roof 2 (second tier)
+                drawRect(Color(0xFF02040A), Offset(810f, 250f), Size(60f, 85f))
+                val roof2 = Path().apply {
+                    moveTo(780f, 260f)
+                    quadraticTo(810f, 250f, 840f, 250f)
+                    quadraticTo(870f, 250f, 900f, 260f)
+                    lineTo(880f, 240f)
+                    lineTo(800f, 240f)
+                    close()
+                }
+                drawPath(roof2, Color(0xFF02040A))
+                // Top spire
+                drawLine(
+                    color = Color(0xFF02040A),
+                    start = Offset(840f, 240f),
+                    end = Offset(840f, 180f),
+                    strokeWidth = 4f
+                )
+
+                // Ground plate
+                drawRect(color = Color(0xFF02040A), topLeft = Offset(0f, 480f), size = Size(1024f, 96f))
+
+                // Calculate Silhouette Samurai Choreography
+                // Left Samurai starts 180f, moves at 1500ms to center. Clashes at 3000ms.
+                val s1X = if (elapsedMs < 1500) {
+                    180f
+                } else if (elapsedMs < 3000) {
+                    val progress = (elapsedMs - 1500f) / 1500f // 0 to 1
+                    180f + progress * (512f - 80f - 180f)
+                } else {
+                    512f - 90f
+                }
+
+                val s1Y = if (elapsedMs < 1500) {
+                    480f - 150f
+                } else if (elapsedMs < 3000) {
+                    val progress = (elapsedMs - 1500f) / 1500f // 0 to 1
+                    (480f - 150f) - kotlin.math.sin(progress * Math.PI).toFloat() * 180f
+                } else {
+                    480f - 150f - 40f
+                }
+
+                // Right Samurai starts 844f, moves at 1500ms to center. Clashes at 3000ms.
+                val s2X = if (elapsedMs < 1500) {
+                    844f - 50f
+                } else if (elapsedMs < 3000) {
+                    val progress = (elapsedMs - 1500f) / 1500f
+                    (844f - 50f) - progress * ((844f - 50f) - (512f + 30f))
+                } else {
+                    512f + 40f
+                }
+
+                val s2Y = if (elapsedMs < 1500) {
+                    480f - 150f
+                } else if (elapsedMs < 3000) {
+                    val progress = (elapsedMs - 1500f) / 1500f
+                    (480f - 150f) - kotlin.math.sin(progress * Math.PI).toFloat() * 180f
+                } else {
+                    480f - 150f - 40f
+                }
+
+                // Draw Left Samurai
+                drawSamuraiSilhouette(this, s1X, s1Y, xRight = true, neonColor = Color(0xFF6366F1), isLeftSlam = (elapsedMs >= 1500 && elapsedMs < 3000))
+
+                // Draw Right Samurai
+                drawSamuraiSilhouette(this, s2X, s2Y, xRight = false, neonColor = Color(0xFFEF4444), isLeftSlam = (elapsedMs >= 1500 && elapsedMs < 3000))
+
+                // Draw Sparks on Clash
+                if (elapsedMs >= 3000) {
+                    sparkParticles.forEach { sp ->
+                        drawCircle(
+                            color = Color(0xFFFFD700).copy(alpha = 1.0f - (sp.currentLife.toFloat() / sp.maxLife.toFloat())),
+                            radius = sp.size,
+                            center = Offset(sp.x, sp.y)
+                        )
                     }
-                    setOnErrorListener { _, _, _ ->
-                        true // Consume the error to prevent crash/dialog and fallback beautifully
+                    if (elapsedMs < 3120) {
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.8f),
+                            radius = 60f,
+                            center = Offset(512f, 250f)
+                        )
                     }
                 }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-        
-        // Dark vignette cinematic overlay
+
+                // Falling Sakura Petals
+                sakuraPetals.forEach { petal ->
+                    withTransform({
+                        translate(petal.x, petal.y)
+                        rotate(petal.rotation, pivot = Offset.Zero)
+                    }) {
+                        val leaf = Path().apply {
+                            moveTo(0f, 0f)
+                            quadraticTo(petal.size / 2f, -petal.size / 2f, petal.size, 0f)
+                            quadraticTo(petal.size / 2f, petal.size / 2f, 0f, 0f)
+                            close()
+                        }
+                        drawPath(path = leaf, color = Color(0xFFFDA4AF))
+                    }
+                }
+            }
+        }
+
+        // Vignette Overlay
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color.Black.copy(alpha = 0.5f),
+                            Color.Black.copy(alpha = 0.4f),
                             Color.Transparent,
-                            Color.Black.copy(alpha = 0.85f)
+                            Color.Black.copy(alpha = 0.8f)
                         )
                     )
                 )
         )
-        
-        // Title & subtitles matching the gorgeous aesthetic
+
+        // Subtitles and Skip Button Layer
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -943,35 +1192,39 @@ fun IntroVideoScreen(onFinished: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "SAMURAI SHOWDOWN • CINEMATIC INTRO",
+                text = "SAMURAI SHOWDOWN • CINEMATIC RE-FIGHT",
                 color = Color(0xFFF43F5E).copy(alpha = 0.8f),
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 3.sp,
+                letterSpacing = 4.sp,
                 fontFamily = FontFamily.Monospace,
                 modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .padding(8.dp)
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             )
-            
-            Text(
-                text = textOverlay.uppercase(),
-                color = if (textOverlay == "BEGIN") Color(0xFFEF4444) else Color.White,
-                fontSize = if (textOverlay == "ONLY ONE WILL WIN.") 24.sp else 30.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp,
-                textAlign = TextAlign.Center,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .border(2.dp, if (textOverlay == "BEGIN") Color(0xFFEF4444) else Color.White)
-                    .padding(horizontal = 24.dp, vertical = 12.dp)
-            )
-            
+
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .border(2.dp, Color.White)
+                    .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
+                    .border(2.dp, if (textOverlay == "BEGIN") Color(0xFFEF4444) else Color.White, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 30.dp, vertical = 14.dp)
+            ) {
+                Text(
+                    text = textOverlay.uppercase(),
+                    color = if (textOverlay == "BEGIN") Color(0xFFEF4444) else Color.White,
+                    fontSize = if (textOverlay == "ONLY ONE WILL WIN.") 22.sp else 28.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 2.sp,
+                    textAlign = TextAlign.Center,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .border(2.dp, Color.White, RoundedCornerShape(2.dp))
                     .background(Color(0xFFE11D48))
                     .clickable { onFinished() }
                     .padding(horizontal = 24.dp, vertical = 12.dp)
@@ -987,5 +1240,98 @@ fun IntroVideoScreen(onFinished: () -> Unit) {
             }
         }
     }
+}
+
+class SakuraPetal(
+    var x: Float,
+    var y: Float,
+    val speedX: Float,
+    val speedY: Float,
+    val size: Float,
+    var rotation: Float,
+    val rotSpeed: Float
+)
+
+class IntroSpark(
+    var x: Float,
+    var y: Float,
+    var vx: Float,
+    var vy: Float,
+    val size: Float,
+    val maxLife: Int,
+    var currentLife: Int = 0
+)
+
+fun drawSamuraiSilhouette(
+    scope: androidx.compose.ui.graphics.drawscope.DrawScope,
+    x: Float,
+    y: Float,
+    xRight: Boolean,
+    neonColor: Color,
+    isLeftSlam: Boolean
+) {
+    val torsoColor = Color(0xFF0C1324)
+    val headColor = Color(0xFF030712)
+    val dir = if (xRight) 1f else -1f
+
+    // Head
+    scope.drawCircle(
+        color = headColor,
+        radius = 16f,
+        center = Offset(x + 25f, y + 20f)
+    )
+
+    // Samurai helmet (Kabuto spikes)
+    val kabuto = Path().apply {
+        moveTo(x + 25f - 16f, y + 16f)
+        lineTo(x + 25f + 16f, y + 16f)
+        lineTo(x + 25f + 4f * dir, y + 4f)
+        close()
+    }
+    scope.drawPath(kabuto, torsoColor)
+
+    // Body/Kimono
+    val body = Path().apply {
+        moveTo(x + 25f - 20f * dir, y + 36f)
+        lineTo(x + 25f + 20f * dir, y + 36f)
+        lineTo(x + 25f + 25f * dir, y + 150f)
+        lineTo(x + 25f - 25f * dir, y + 150f)
+        close()
+    }
+    scope.drawPath(body, torsoColor)
+
+    // Glowing Neon Katana sword in dynamic sword stance or leap positions
+    val swordStart: Offset
+    val swordEnd: Offset
+
+    if (isLeftSlam) {
+        swordStart = Offset(x + 25f + 12f * dir, y + 45f)
+        swordEnd = Offset(x + 25f + 70f * dir, y + 90f)
+    } else {
+        swordStart = Offset(x + 25f + 15f * dir, y + 70f)
+        swordEnd = Offset(x + 25f + 65f * dir, y + 10f)
+    }
+
+    scope.drawLine(
+        color = neonColor.copy(alpha = 0.35f),
+        start = swordStart,
+        end = swordEnd,
+        strokeWidth = 14f,
+        cap = StrokeCap.Round
+    )
+    scope.drawLine(
+        color = neonColor.copy(alpha = 0.7f),
+        start = swordStart,
+        end = swordEnd,
+        strokeWidth = 8f,
+        cap = StrokeCap.Round
+    )
+    scope.drawLine(
+        color = Color.White,
+        start = swordStart,
+        end = swordEnd,
+        strokeWidth = 4f,
+        cap = StrokeCap.Round
+    )
 }
 

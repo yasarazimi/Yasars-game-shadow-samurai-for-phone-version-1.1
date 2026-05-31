@@ -1,6 +1,7 @@
 package com.example.game
 
 import androidx.compose.ui.geometry.Rect
+import kotlin.math.abs
 
 enum class FighterState {
     IDLE, RUN, JUMP, FALL, ATTACK, TAKE_HIT, DEATH
@@ -82,6 +83,12 @@ class VectorFighter(
     }
 
     fun updatePhysics() {
+        // Friction decay for taking hits/knockback sliding to feel extra polished!
+        if (state == FighterState.TAKE_HIT || state == FighterState.DEATH) {
+            velocityX *= 0.85f
+            if (abs(velocityX) < 0.2f) velocityX = 0f
+        }
+
         // Apply velocity
         x += velocityX
         y += velocityY
@@ -93,6 +100,10 @@ class VectorFighter(
         // Gravity function
         val groundY = CANVAS_HEIGHT - 96f // 480f
         if (y + height + velocityY >= groundY) {
+            // Check if we just landed to play a thump sound
+            if (velocityY > 1f) {
+                SoundManager.playMove()
+            }
             velocityY = 0f
             y = VERTICAL_BOUND_LIMIT // 330f
         } else {
@@ -107,6 +118,10 @@ class VectorFighter(
                 switchState(FighterState.FALL)
             } else if (velocityX != 0f) {
                 switchState(FighterState.RUN)
+                // Periodically play running footstep sounds
+                if (framesElapsed % 32 == 0) {
+                    SoundManager.playMove()
+                }
             } else {
                 switchState(FighterState.IDLE)
             }
@@ -139,17 +154,25 @@ class VectorFighter(
         if (dead) return
         switchState(FighterState.ATTACK)
         isAttacking = true
+        SoundManager.playSlash()
     }
 
-    fun takeHit() {
+    fun takeHit(attackerFacingDirection: Float) {
         if (dead) return
         health -= 20
+        
+        // Superior Knockback: apply heavy horizontal impulse away from attacker + vertical pop-up!
+        val knockbackForceX = 15f
+        velocityX = attackerFacingDirection * knockbackForceX
+        velocityY = -4.5f // Slight pop upwards to create awesome fighting game launch effect
+        
         if (health <= 0) {
             health = 0
             switchState(FighterState.DEATH)
         } else {
             switchState(FighterState.TAKE_HIT)
         }
+        SoundManager.playHit()
     }
 
     fun reset(startX: Float, startY: Float) {
