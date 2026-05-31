@@ -1,0 +1,6 @@
+{
+  "name": "Samurai Showdown",
+  "description": "An action-packed 2D arcade style samurai dueling and fighting game built in Android and Jetpack Compose.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,92 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Outer Shield Halo Ring -->
+    <path
+        android:fillColor="#15172C"
+        android:strokeColor="#EF4444"
+        android:strokeWidth="3"
+        android:pathData="M54,12 A42,42 0 1,1 53.9,12 Z" />
+
+    <!-- Innermost Glowing Red Crest -->
+    <path
+        android:fillColor="#3A122C"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:pathData="M54,22 A32,32 0 1,1 53.9,22 Z" />
+
+    <!-- Katana 1 Blade (Glinting Steel) -->
+    <path
+        android:strokeColor="#E2E8F0"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M32,76 L76,32" />
+
+    <!-- Katana 1 Glowing core -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M33.5,74.5 L73.5,34.5" />
+
+    <!-- Katana 1 Tsuba Guard (Gold) -->
+    <path
+        android:fillColor="#F59E0B"
+        android:strokeColor="#D97706"
+        android:strokeWidth="1"
+        android:pathData="M27.5,70.5 L37.5,80.5 Z M27.5,70.5 C26,69 29,66 30.5,67.5 L37.5,74.5 C39,76 36,79 34.5,77.5 Z" />
+
+    <!-- Katana x Hilt Grip (Red-Gold Wrap) -->
+    <path
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="5.5"
+        android:strokeLineCap="round"
+        android:pathData="M22,86 L29,79" />
+    <path
+        android:strokeColor="#B91C1C"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M21,87 L27,81" />
+
+    <!-- Katana 2 Blade (Crossed Dual Sword) -->
+    <path
+        android:strokeColor="#CBD5E1"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M76,76 L32,32" />
+
+    <!-- Katana 2 Glowing core -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M74.5,74.5 L34.5,34.5" />
+
+    <!-- Katana 2 Guard (Gold) -->
+    <path
+        android:fillColor="#F59E0B"
+        android:strokeColor="#D97706"
+        android:strokeWidth="1"
+        android:pathData="M80.5,70.5 L70.5,80.5 Z" />
+
+    <!-- Katana 2 Hilt Grip (Blue-Gold Wrap) -->
+    <path
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="5.5"
+        android:strokeLineCap="round"
+        android:pathData="M86,86 L79,79" />
+    <path
+        android:strokeColor="#1E3A8A"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M87,87 L81,81" />
+
+    <!-- Center Radiant Combat Star Spark -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,44 L56.5,51.5 L64,54 L56.5,56.5 L54,64 L51.5,56.5 L44,54 L51.5,51.5 Z" />
+
+</vector>
