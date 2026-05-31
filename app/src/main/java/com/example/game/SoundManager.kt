@@ -16,6 +16,11 @@ object SoundManager {
     private var isMusicPlaying = false
     private var musicJob = scope.launch { } // Empty job to initialize
 
+    // Externally adjustable volumes (range 0.0f to 1.0f)
+    var soundVolume: Float = 0.8f
+    var musicVolume: Float = 0.5f
+    var keyMovementVolume: Float = 0.5f
+
     // Generates a sweep tone with customized frequency drop or rise
     private fun generateSweepWave(
         startFreq: Double,
@@ -56,14 +61,16 @@ object SoundManager {
 
     fun playJump() {
         scope.launch {
-            val buffer = generateSweepWave(280.0, 580.0, 140, 0.3f, "sine")
+            val volume = 0.3f * keyMovementVolume * soundVolume
+            val buffer = generateSweepWave(280.0, 580.0, 140, volume, "sine")
             playBuffer(buffer)
         }
     }
 
     fun playSlash() {
         scope.launch {
-            val buffer = generateSweepWave(1300.0, 320.0, 150, 0.4f, "triangle")
+            val volume = 0.4f * soundVolume
+            val buffer = generateSweepWave(1300.0, 320.0, 150, volume, "triangle")
             playBuffer(buffer)
         }
     }
@@ -71,8 +78,8 @@ object SoundManager {
     fun playHit() {
         scope.launch {
             // Heavy crunch/slashing impact: square sweep + deep sine bass thump
-            val baseThump = generateSweepWave(160.0, 40.0, 220, 0.6f, "sine")
-            val clashSweep = generateSweepWave(900.0, 150.0, 130, 0.45f, "square")
+            val baseThump = generateSweepWave(160.0, 40.0, 220, 0.6f * soundVolume, "sine")
+            val clashSweep = generateSweepWave(900.0, 150.0, 130, 0.45f * soundVolume, "square")
 
             val mixLen = maxOf(baseThump.size, clashSweep.size)
             val mixed = ShortArray(mixLen)
@@ -88,14 +95,16 @@ object SoundManager {
 
     fun playMove() {
         scope.launch {
-            val buffer = generateSweepWave(85.0, 55.0, 50, 0.15f, "sine")
+            val volume = 0.15f * keyMovementVolume * soundVolume
+            val buffer = generateSweepWave(85.0, 55.0, 50, volume, "sine")
             playBuffer(buffer)
         }
     }
 
     fun playIntroClash() {
         scope.launch {
-            val sweep = generateSweepWave(90.0, 1100.0, 600, 0.4f, "sine")
+            val volume = 0.4f * soundVolume
+            val sweep = generateSweepWave(90.0, 1100.0, 600, volume, "sine")
             playBuffer(sweep)
         }
     }
@@ -160,9 +169,9 @@ object SoundManager {
                 }
                 
                 val melodyFreq = scale[index]
-                val melody = generateSweepWave(melodyFreq, melodyFreq * 0.99, duration, 0.15f, "triangle")
+                val melody = generateSweepWave(melodyFreq, melodyFreq * 0.99, duration, 0.15f * musicVolume, "triangle")
                 val bass = if (beat % 4 == 0 || beat == 6 || beat == 14) {
-                    generateSweepWave(kickFreq, kickFreq * 0.5, 110, 0.35f, "sine")
+                    generateSweepWave(kickFreq, kickFreq * 0.5, 110, 0.35f * musicVolume, "sine")
                 } else ShortArray(0)
 
                 val mixed = ShortArray(melody.size)

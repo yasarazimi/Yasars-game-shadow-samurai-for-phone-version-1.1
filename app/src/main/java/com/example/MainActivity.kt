@@ -60,6 +60,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import android.app.Activity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -113,51 +116,75 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+enum class ScreenState {
+    INTRO,
+    GATE_MENU,
+    SELECTION_MENU,
+    PLAYING
+}
+
 @Composable
 fun GameScreen(engine: GameEngine, renderer: GameRenderer) {
-    var showIntroVideo by remember { mutableStateOf(true) }
-    var showMenu by remember { mutableStateOf(true) }
+    var screenState by remember { mutableStateOf(ScreenState.INTRO) }
     var runningMode by remember { mutableStateOf(GameMode.PLAYER_VS_AI) }
     var selectedDifficulty by remember { mutableStateOf(AIDifficulty.MEDIUM) }
     
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     
     // 60 FPS Core Game loop clock activation
-    LaunchedEffect(showMenu, engine.isGameOver) {
-        if (!showMenu && !engine.isGameOver) {
+    LaunchedEffect(screenState, engine.isGameOver) {
+        if (screenState == ScreenState.PLAYING && !engine.isGameOver) {
             engine.startTimer(this)
-            while (!showMenu && !engine.isGameOver) {
+            while (screenState == ScreenState.PLAYING && !engine.isGameOver) {
                 engine.updateFrame()
                 delay(16) // roughly 60 fps
             }
         }
     }
 
-    if (showIntroVideo) {
-        IntroVideoScreen(onFinished = { 
-            showIntroVideo = false 
-            com.example.game.SoundManager.startAmbientMusic()
-        })
-    } else if (showMenu) {
-        MainMenu(
-            runningMode = runningMode,
-            difficulty = selectedDifficulty,
-            onModeChange = { runningMode = it },
-            onDifficultyChange = { selectedDifficulty = it },
-            onStartGame = {
-                engine.startGame(runningMode, selectedDifficulty)
-                showMenu = false
-            }
-        )
-    } else {
-        ArenaLayout(
-            engine = engine,
-            renderer = renderer,
-            onBackToMenu = {
-                showMenu = true
-                engine.resetGame()
-            }
-        )
+    when (screenState) {
+        ScreenState.INTRO -> {
+            IntroVideoScreen(onFinished = { 
+                screenState = ScreenState.GATE_MENU
+                com.example.game.SoundManager.startAmbientMusic()
+            })
+        }
+        ScreenState.GATE_MENU -> {
+            GateMenuScreen(
+                onStart = {
+                    screenState = ScreenState.SELECTION_MENU
+                },
+                onQuit = {
+                    (context as? Activity)?.finish()
+                }
+            )
+        }
+        ScreenState.SELECTION_MENU -> {
+            MainMenu(
+                runningMode = runningMode,
+                difficulty = selectedDifficulty,
+                onModeChange = { runningMode = it },
+                onDifficultyChange = { selectedDifficulty = it },
+                onStartGame = {
+                    engine.startGame(runningMode, selectedDifficulty)
+                    screenState = ScreenState.PLAYING
+                },
+                onBackPressed = {
+                    screenState = ScreenState.GATE_MENU
+                }
+            )
+        }
+        ScreenState.PLAYING -> {
+            ArenaLayout(
+                engine = engine,
+                renderer = renderer,
+                onBackToMenu = {
+                    screenState = ScreenState.GATE_MENU
+                    engine.resetGame()
+                }
+            )
+        }
     }
 }
 
@@ -167,7 +194,8 @@ fun MainMenu(
     difficulty: AIDifficulty,
     onModeChange: (GameMode) -> Unit,
     onDifficultyChange: (AIDifficulty) -> Unit,
-    onStartGame: () -> Unit
+    onStartGame: () -> Unit,
+    onBackPressed: () -> Unit
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -343,6 +371,28 @@ fun MainMenu(
                         fontFamily = FontFamily.Monospace
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Back to main menu door option
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .width(320.dp)
+                    .height(48.dp)
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .border(2.dp, Color(0xFF64748B))
+                    .clickable { onBackPressed() }
+            ) {
+                Text(
+                    text = "« BACK TO TITLE MENU",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    fontFamily = FontFamily.Monospace
+                )
             }
         }
     }
@@ -1333,5 +1383,302 @@ fun drawSamuraiSilhouette(
         strokeWidth = 4f,
         cap = StrokeCap.Round
     )
+}
+
+@Composable
+fun GateMenuScreen(
+    onStart: () -> Unit,
+    onQuit: () -> Unit
+) {
+    val context = LocalContext.current
+    var showSettings by remember { mutableStateOf(false) }
+
+    // Read current volumes from SoundManager
+    var masterVolume by remember { mutableStateOf(com.example.game.SoundManager.soundVolume) }
+    var ambientVolume by remember { mutableStateOf(com.example.game.SoundManager.musicVolume) }
+    var keystepsVolume by remember { mutableStateOf(com.example.game.SoundManager.keyMovementVolume) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF0C1021),
+                        Color(0xFF03001C)
+                    )
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        // Red sun overlay details
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawCircle(
+                color = Color(0xFFEF4444).copy(alpha = 0.08f),
+                radius = size.minDimension * 0.35f,
+                center = Offset(size.width * 0.5f, size.height * 0.45f)
+            )
+        }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(24.dp)
+        ) {
+            // Giant retro title with red/neon accents
+            Text(
+                text = "SAMURAI SHOWDOWN",
+                fontSize = 40.sp,
+                color = Color(0xFFF43F5E),
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 2.sp,
+                textAlign = TextAlign.Center,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier
+                    .border(3.dp, Color.White)
+                    .background(Color.Black.copy(alpha = 0.85f))
+                    .padding(horizontal = 24.dp, vertical = 14.dp)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "THE ULTIMATE SYNTHETIC SWORD DUEL",
+                color = Color(0xFF94A3B8),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                fontFamily = FontFamily.Monospace
+            )
+
+            Spacer(modifier = Modifier.height(36.dp))
+
+            // Start option button
+            GateButton(
+                text = "START SHOWDOWN",
+                accentColor = Color(0xFF10B981) // Emerald accent for start
+            ) {
+                onStart()
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Settings option button
+            GateButton(
+                text = "SETTINGS / VOLUME",
+                accentColor = Color(0xFFEF4444) // Vibrant red for settings
+            ) {
+                showSettings = true
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Quit option button
+            GateButton(
+                text = "QUIT GAME",
+                accentColor = Color(0xFF64748B) // Slate grey for quit
+            ) {
+                onQuit()
+            }
+        }
+
+        // Overlay dialog/popup for Settings
+        if (showSettings) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.85f))
+                    .clickable { /* absorb clicks */ },
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF111322)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .widthIn(max = 480.dp)
+                        .fillMaxWidth(0.9f)
+                        .border(3.dp, Color(0xFFF43F5E), RoundedCornerShape(8.dp))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "AUDIO CONFIGURATION",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // Slider 1: Master volume
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "MASTER SFX VOLUME",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "${(masterVolume * 100).toInt()}%",
+                                color = Color(0xFFF43F5E),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Slider(
+                            value = masterVolume,
+                            onValueChange = { newValue ->
+                                masterVolume = newValue
+                                com.example.game.SoundManager.soundVolume = newValue
+                                // Play testing slash preview on adjusting
+                                com.example.game.SoundManager.playSlash()
+                            },
+                            valueRange = 0f..1f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFFF43F5E),
+                                activeTrackColor = Color(0xFFF43F5E),
+                                inactiveTrackColor = Color(0xFF1E293B)
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Slider 2: Traditional Music level
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "TRADITIONAL MUSIC",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "${(ambientVolume * 100).toInt()}%",
+                                color = Color(0xFFEF4444),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Slider(
+                            value = ambientVolume,
+                            onValueChange = { newValue ->
+                                ambientVolume = newValue
+                                com.example.game.SoundManager.musicVolume = newValue
+                            },
+                            valueRange = 0f..1f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFFEF4444),
+                                activeTrackColor = Color(0xFFEF4444),
+                                inactiveTrackColor = Color(0xFF1E293B)
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Slider 3: Sound of keys and movements
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "KEYS & MOVEMENTS",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "${(keystepsVolume * 100).toInt()}%",
+                                color = Color(0xFF10B981),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Slider(
+                            value = keystepsVolume,
+                            onValueChange = { newValue ->
+                                keystepsVolume = newValue
+                                com.example.game.SoundManager.keyMovementVolume = newValue
+                                // Play movement test feed back
+                                com.example.game.SoundManager.playMove()
+                            },
+                            valueRange = 0f..1f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Color(0xFF10B981),
+                                activeTrackColor = Color(0xFF10B981),
+                                inactiveTrackColor = Color(0xFF1E293B)
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(30.dp))
+
+                        // Save & Close button
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .background(Color(0xFFE11D48), RoundedCornerShape(4.dp))
+                                .border(2.dp, Color.White, RoundedCornerShape(4.dp))
+                                .clickable {
+                                    showSettings = false
+                                }
+                        ) {
+                            Text(
+                                text = "APPLY SETTINGS",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun GateButton(
+    text: String,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .width(300.dp)
+            .border(3.dp, accentColor)
+            .background(Color.Black.copy(alpha = 0.7f))
+            .clickable { onClick() }
+            .padding(vertical = 14.dp)
+    ) {
+        Text(
+            text = text.uppercase(),
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 1.sp,
+            fontFamily = FontFamily.Monospace
+        )
+    }
 }
 
