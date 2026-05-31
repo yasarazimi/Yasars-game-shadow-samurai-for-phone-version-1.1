@@ -22,6 +22,8 @@ class GameRenderer {
         width: Float,
         height: Float
     ) {
+        if (width <= 0f || height <= 0f || width.isNaN() || height.isNaN()) return
+        
         // Calculate uniform scale to fit 1024x576 aspect ratio
         val gameWidth = 1024f
         val gameHeight = 576f

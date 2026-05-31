@@ -80,6 +80,7 @@ class GameEngine {
         player2.reset(startX = 824f, startY = 330f)
         timer = 60
         isGameOver = false
+        timerRunning = false
         winnerText = ""
         p1LeftPressed = false
         p1RightPressed = false

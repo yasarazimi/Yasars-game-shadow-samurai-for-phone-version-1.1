@@ -76,9 +76,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Force landscape orientation for true fighting game experience
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-        
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
@@ -101,6 +98,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun GameScreen(engine: GameEngine, renderer: GameRenderer) {
+    var showIntroVideo by remember { mutableStateOf(true) }
     var showMenu by remember { mutableStateOf(true) }
     var runningMode by remember { mutableStateOf(GameMode.PLAYER_VS_AI) }
     var selectedDifficulty by remember { mutableStateOf(AIDifficulty.MEDIUM) }
@@ -118,7 +116,9 @@ fun GameScreen(engine: GameEngine, renderer: GameRenderer) {
         }
     }
 
-    if (showMenu) {
+    if (showIntroVideo) {
+        IntroVideoScreen(onFinished = { showIntroVideo = false })
+    } else if (showMenu) {
         MainMenu(
             runningMode = runningMode,
             difficulty = selectedDifficulty,
@@ -879,3 +879,113 @@ fun MatchCompletionOverlay(
         }
     }
 }
+
+@Composable
+fun IntroVideoScreen(onFinished: () -> Unit) {
+    val context = LocalContext.current
+    var textOverlay by remember { mutableStateOf("THE BLADES AWAKEN...") }
+    
+    // Animate subtitles based on exact cinematic timing matching the requested frames
+    LaunchedEffect(Unit) {
+        delay(1200)
+        textOverlay = "BEGIN"
+        delay(1500)
+        textOverlay = "ONLY ONE WILL WIN."
+        delay(2500)
+        onFinished() // transition to selection menu
+    }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0C0E1E)),
+        contentAlignment = Alignment.Center
+    ) {
+        // High quality cinematic background video with graceful errors fallback
+        androidx.compose.ui.viewinterop.AndroidView(
+            factory = { ctx ->
+                android.widget.VideoView(ctx).apply {
+                    val videoUri = android.net.Uri.parse("https://assets.mixkit.co/videos/preview/mixkit-curved-roof-of-a-japanese-temple-42171-large.mp4")
+                    setVideoURI(videoUri)
+                    setOnPreparedListener { mp ->
+                        mp.isLooping = true
+                        start()
+                    }
+                    setOnErrorListener { _, _, _ ->
+                        true // Consume the error to prevent crash/dialog and fallback beautifully
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+        
+        // Dark vignette cinematic overlay
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.5f),
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.85f)
+                        )
+                    )
+                )
+        )
+        
+        // Title & subtitles matching the gorgeous aesthetic
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "SAMURAI SHOWDOWN • CINEMATIC INTRO",
+                color = Color(0xFFF43F5E).copy(alpha = 0.8f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 3.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .padding(8.dp)
+            )
+            
+            Text(
+                text = textOverlay.uppercase(),
+                color = if (textOverlay == "BEGIN") Color(0xFFEF4444) else Color.White,
+                fontSize = if (textOverlay == "ONLY ONE WILL WIN.") 24.sp else 30.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp,
+                textAlign = TextAlign.Center,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .border(2.dp, if (textOverlay == "BEGIN") Color(0xFFEF4444) else Color.White)
+                    .padding(horizontal = 24.dp, vertical = 12.dp)
+            )
+            
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .border(2.dp, Color.White)
+                    .background(Color(0xFFE11D48))
+                    .clickable { onFinished() }
+                    .padding(horizontal = 24.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = "SKIP TO SELECTION »",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp
+                )
+            }
+        }
+    }
+}
+
